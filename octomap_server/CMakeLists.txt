@@ -6,6 +6,7 @@ set(PACKAGE_DEPENDENCIES
   visualization_msgs
   sensor_msgs
   pcl_ros
+  nav_msgs
   pcl_conversions
   nav_msgs
   std_msgs
@@ -68,6 +69,9 @@ target_link_libraries(octomap_saver ${PROJECT_NAME} ${LINK_LIBS})
 
 add_executable(octomap_tracking_server_node src/octomap_tracking_server_node.cpp)
 target_link_libraries(octomap_tracking_server_node ${PROJECT_NAME} ${LINK_LIBS})
+
+#add_executable(tf_pub src/tfpub.cpp)
+#target_link_libraries(tf_pub ${catkin_LIBRARIES})
 
 # Nodelet
 add_library(octomap_server_nodelet src/octomap_server_nodelet.cpp)

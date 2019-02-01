@@ -14,7 +14,7 @@ set(PACKAGE_DEPENDENCIES
   octomap_ros
   octomap_msgs
   dynamic_reconfigure
-  nodelet  
+  nodelet
 )
 
 
@@ -55,6 +55,12 @@ add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_gencfg)
 add_executable(octomap_server_node src/octomap_server_node.cpp)
 target_link_libraries(octomap_server_node ${PROJECT_NAME} ${LINK_LIBS})
 
+add_executable(pcl_nan_filter_node src/pcl_nan_filter_node.cpp)
+target_link_libraries(pcl_nan_filter_node ${PROJECT_NAME} ${LINK_LIBS})
+
+add_executable(pcl_filter_node src/pcl_filter_node.cpp)
+target_link_libraries(pcl_filter_node ${PROJECT_NAME} ${LINK_LIBS})
+
 #add_executable(octomap_color_server_node src/octomap_color_server_node.cpp)
 #target_link_libraries(octomap_color_server_node ${PROJECT_NAME} ${LINK_LIBS})
 
@@ -85,6 +91,8 @@ install(TARGETS ${PROJECT_NAME}
   octomap_saver
   octomap_tracking_server_node
   octomap_server_nodelet
+  pcl_nan_filter_node
+  pcl_filter_node
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

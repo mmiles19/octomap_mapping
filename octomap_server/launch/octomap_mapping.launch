@@ -9,7 +9,9 @@
 
 <launch>
 
+	<arg name="enable_filter" default="1"/>
 	<arg name="resolution" default="0.2" />
+	<arg name="max_range" default="5.0" />
 
 	<node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
 		<param name="resolution" value="$(arg resolution)" />
@@ -18,11 +20,18 @@
 		<param name="frame_id" type="string" value="world" />
 
 		<!-- maximum range to integrate (speedup!) -->
-		<param name="sensor_model/max_range" value="5.0" />
+		<!-- 5.0 0.7 0.4 0.12 0.97 -->
+		<param name="sensor_model/max_range" value="$(arg max_range)" />
+		<!-- <param name="sensor_model/hit" value=".7" />
+		<param name="sensor_model/miss" value=".4" />
+		<param name="sensor_model/min" value=".2" />
+		<param name="sensor_model/max" value=".97" />  -->
 
 		<!-- data source to integrate (PointCloud2) -->
-		<!-- <remap from="cloud_in" to="/camera/depth_registered/points" /> -->
-		<remap from="cloud_in" to="/voxel_grid/output" />
+		<remap from="cloud_in" to="filter_output" if="$(arg enable_filter)"/>
+		<remap from="cloud_in" to="/camera/depth_registered/points" unless="$(arg enable_filter)"/>
+		<!-- <remap from="cloud_in" to="/camera/depth_registered/points"/> -->
+		<!-- <remap from="cloud_in" to="/pcl_throttled"/> -->
 
 	</node>
 <!--

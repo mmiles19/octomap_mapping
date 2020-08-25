@@ -46,7 +46,9 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_reconfigureServer(m_config_mutex),
   m_octree(NULL),
   m_maxRange(-1.0),
-  m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
+  m_worldFrameId("/map"), 
+  m_baseFrameId("base_footprint"), 
+  m_cloudInTopic("cloud_in"),
   m_useHeightMap(true),
   m_useColoredMap(false),
   m_colorFactor(0.8),
@@ -73,6 +75,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   double probHit, probMiss, thresMin, thresMax;
 
   ros::NodeHandle private_nh(private_nh_);
+  private_nh.param("cloud_in", m_cloudInTopic, m_cloudInTopic);
   private_nh.param("frame_id", m_worldFrameId, m_worldFrameId);
   private_nh.param("base_frame_id", m_baseFrameId, m_baseFrameId);
   private_nh.param("height_map", m_useHeightMap, m_useHeightMap);
@@ -166,6 +169,14 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   } else
     ROS_INFO("Publishing non-latched (topics are only prepared as needed, will only be re-published on map change");
 
+#ifdef WITH_EDT
+  private_nh.param("edt/enable", m_edt.config.enable, m_edt.config.enable);
+  private_nh.param("edt/min_res", m_edt.config.min_res, m_edt.config.min_res);
+  private_nh.param("edt/max_dist", m_edt.config.max_dist, m_edt.config.max_dist);
+  private_nh.param("edt/bbx_resize_thresh", m_edt.config.bbx_resize_thresh, m_edt.config.bbx_resize_thresh);
+  private_nh.param("edt/unknown_as_occupied", m_edt.config.unknown_as_occupied, m_edt.config.unknown_as_occupied);
+#endif
+
   m_markerPub = m_nh.advertise<visualization_msgs::MarkerArray>("occupied_cells_vis_array", 1, m_latchedTopics);
   m_binaryMapPub = m_nh.advertise<Octomap>("octomap_binary", 1, m_latchedTopics);
   m_fullMapPub = m_nh.advertise<Octomap>("octomap_full", 1, m_latchedTopics);
@@ -173,7 +184,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
 
-  m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
+  m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, m_cloudInTopic, 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
   m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, _1));
 
@@ -181,6 +192,13 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_octomapFullService = m_nh.advertiseService("octomap_full", &OctomapServer::octomapFullSrv, this);
   m_clearBBXService = private_nh.advertiseService("clear_bbx", &OctomapServer::clearBBXSrv, this);
   m_resetService = private_nh.advertiseService("reset", &OctomapServer::resetSrv, this);
+
+#ifdef WITH_EDT
+  m_edtPub = m_nh.advertise<sensor_msgs::PointCloud2>("edt", 1, m_latchedTopics);
+  m_edtVisPub = m_nh.advertise<visualization_msgs::MarkerArray>("edt_vis_array", 1, m_latchedTopics);
+#endif
+
+  // m_normalsVisPub = m_nh.advertise<visualization_msgs::Marker>("normals", 1, m_latchedTopics);
 
   dynamic_reconfigure::Server<OctomapServerConfig>::CallbackType f;
   f = boost::bind(&OctomapServer::reconfigureCallback, this, _1, _2);
@@ -437,7 +455,7 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 
   // mark free cells only if not seen occupied in this cloud
   for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
-    if (occupied_cells.find(*it) == occupied_cells.end()){
+    if (occupied_cells.find(*it) == occupied_cells.end()){ // if free cell not in occupied cells
       m_octree->updateNode(*it, false);
     }
   }
@@ -499,6 +517,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   bool publishPointCloud = (m_latchedTopics || m_pointCloudPub.getNumSubscribers() > 0);
   bool publishBinaryMap = (m_latchedTopics || m_binaryMapPub.getNumSubscribers() > 0);
   bool publishFullMap = (m_latchedTopics || m_fullMapPub.getNumSubscribers() > 0);
+#ifdef WITH_EDT
+  bool publishDistanceTransform = m_edt.config.enable && (m_latchedTopics || m_edtPub.getNumSubscribers() > 0 || m_edtVisPub.getNumSubscribers() > 0);
+#endif
   m_publish2DMap = (m_latchedTopics || m_mapPub.getNumSubscribers() > 0);
 
   // init markers for free space:
@@ -516,6 +537,15 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 
   // init pointcloud:
   pcl::PointCloud<PCLPoint> pclCloud;
+
+#ifdef WITH_EDT
+  // init EDT
+  pcl::PointCloud<pcl::PointXYZI> edtCloud;
+  // init EDT markers:
+  visualization_msgs::MarkerArray edtVis;
+  // each array stores all cubes of a different size, one for each depth level:
+  edtVis.markers.resize(m_treeDepth+1);
+#endif
 
   // call pre-traversal hook:
   handlePreNodeTraversal(rostime);
@@ -697,6 +727,120 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   if (publishFullMap)
     publishFullOctoMap(rostime);
 
+#ifdef WITH_EDT
+  if (publishDistanceTransform){
+    // OcTreeT *tree = new OcTreeT(*m_octree);
+
+    static bool has_init;
+    if (has_init==NULL)
+    {
+      has_init = false;
+    }
+
+    double x,y,z;
+    m_octree->getMetricMin(x,y,z);
+    octomap::point3d distmap_min_temp(x,y,z);
+    m_octree->getMetricMax(x,y,z);
+    octomap::point3d distmap_max_temp(x,y,z);
+    if (!has_init)
+    {
+      m_edt.bbx_min = distmap_min_temp;
+    }
+    if (fabs(m_edt.bbx_min.x()-distmap_min_temp.x())>m_edt.config.bbx_resize_thresh ||
+        fabs(m_edt.bbx_min.y()-distmap_min_temp.y())>m_edt.config.bbx_resize_thresh ||
+        fabs(m_edt.bbx_min.z()-distmap_min_temp.z())>m_edt.config.bbx_resize_thresh )
+    {
+      m_edt.bbx_min = distmap_min_temp;
+      has_init = false;
+    }
+    if (!has_init)
+    {
+      m_edt.bbx_max = distmap_max_temp;
+    }
+    if (fabs(m_edt.bbx_max.x()-distmap_max_temp.x())>m_edt.config.bbx_resize_thresh ||
+        fabs(m_edt.bbx_max.y()-distmap_max_temp.y())>m_edt.config.bbx_resize_thresh ||
+        fabs(m_edt.bbx_max.z()-distmap_max_temp.z())>m_edt.config.bbx_resize_thresh )
+    {
+      m_edt.bbx_max = distmap_max_temp;
+      has_init = false;
+    }
+    if (!has_init)
+    {
+      ROS_INFO("(Re-)Initing EDT distmap");
+      m_edt.distmap = new DynamicEDTOctomapBase<OcTreeT>(m_edt.config.max_dist, m_octree, m_edt.bbx_min, m_edt.bbx_max, m_edt.config.unknown_as_occupied);
+      has_init = true;
+    }
+    m_edt.distmap->update();
+
+    uint max_edt_depth = 0;
+    while (m_octree->getNodeSize(max_edt_depth)>m_edt.config.min_res && max_edt_depth<m_maxTreeDepth) { max_edt_depth++; }
+
+    for (OcTreeT::iterator it = m_octree->begin(max_edt_depth),
+        end = m_octree->end(); it != end; ++it)
+    {
+      bool inUpdateBBX = isInUpdateBBX(it);
+
+      // call general hook:
+      handleNode(it);
+      if (inUpdateBBX)
+        handleNodeInBBX(it);
+
+      if (!m_octree->isNodeOccupied(*it)){
+        double x = it.getX();
+        double y = it.getY();
+        double z = it.getZ();
+        unsigned idx = it.getDepth();
+        // ROS_INFO("idx %d",idx);
+        assert(idx < edtVis.markers.size());
+
+        geometry_msgs::Point cubeCenter;
+        cubeCenter.x = x;
+        cubeCenter.y = y;
+        cubeCenter.z = z;
+
+        edtVis.markers[idx].points.push_back(cubeCenter);
+
+        float dist = m_edt.distmap->getDistance(octomap::point3d(cubeCenter.x,cubeCenter.y,cubeCenter.z));
+        pcl::PointXYZI edtPt; edtPt.x = x; edtPt.y = y; edtPt.z = z; edtPt.intensity = dist;
+        edtCloud.push_back(edtPt);
+        
+        double h = (1.0 - std::min(std::max(dist / m_edt.distmap->getMaxDist(), (float)0.0), (float)1.0)) *m_colorFactor;
+        std_msgs::ColorRGBA color = heightMapColor(h);
+        color.a = 0.1;
+        edtVis.markers[idx].colors.push_back(color);
+      }
+    }
+    {
+      sensor_msgs::PointCloud2 cloud;
+      pcl::toROSMsg (edtCloud, cloud);
+      cloud.header.frame_id = m_worldFrameId;
+      cloud.header.stamp = rostime;
+      m_edtPub.publish(cloud);
+    }
+
+
+    for (unsigned i= 0; i < edtVis.markers.size(); ++i)
+    {
+      double size = m_octree->getNodeSize(i);
+
+      edtVis.markers[i].header.frame_id = m_worldFrameId;
+      edtVis.markers[i].header.stamp = rostime;
+      edtVis.markers[i].ns = "map";
+      edtVis.markers[i].id = i;
+      edtVis.markers[i].type = visualization_msgs::Marker::CUBE_LIST;
+      edtVis.markers[i].scale.x = size;
+      edtVis.markers[i].scale.y = size;
+      edtVis.markers[i].scale.z = size;
+
+      if (edtVis.markers[i].points.size() > 0)
+        edtVis.markers[i].action = visualization_msgs::Marker::ADD;
+      else
+        edtVis.markers[i].action = visualization_msgs::Marker::DELETE;
+    }
+
+    m_edtVisPub.publish(edtVis);
+  }
+#endif
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_DEBUG("Map publishing in OctomapServer took %f sec", total_elapsed);
@@ -794,6 +938,21 @@ bool OctomapServer::resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Res
     freeNodesVis.markers[i].action = visualization_msgs::Marker::DELETE;
   }
   m_fmarkerPub.publish(freeNodesVis);
+
+#ifdef WITH_EDT
+  visualization_msgs::MarkerArray edtVis;
+  edtVis.markers.resize(m_treeDepth +1);
+  for (unsigned i= 0; i < edtVis.markers.size(); ++i){
+
+    edtVis.markers[i].header.frame_id = m_worldFrameId;
+    edtVis.markers[i].header.stamp = rostime;
+    edtVis.markers[i].ns = "map";
+    edtVis.markers[i].id = i;
+    edtVis.markers[i].type = visualization_msgs::Marker::CUBE_LIST;
+    edtVis.markers[i].action = visualization_msgs::Marker::DELETE;
+  }
+  m_edtVisPub.publish(edtVis);
+#endif
 
   return true;
 }

@@ -13,7 +13,8 @@ set(PACKAGE_DEPENDENCIES
   octomap_ros
   octomap_msgs
   dynamic_reconfigure
-  nodelet  
+  nodelet
+  # dynamic_edt_3d  
 )
 
 
@@ -24,13 +25,21 @@ find_package(PCL REQUIRED QUIET COMPONENTS common sample_consensus io segmentati
 find_package(octomap REQUIRED)
 add_definitions(-DOCTOMAP_NODEBUGOUT)
 
+option(WITH_EDT "Build with subproject dynamicEDT3D" ON)
+if(WITH_EDT)
+add_definitions(-DWITH_EDT)
+find_package(dynamicEDT3D REQUIRED)
+endif()
+
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${OCTOMAP_INCLUDE_DIRS}
 )
-
+if(WITH_EDT)
+include_directories(${DYNAMICEDT3D_INCLUDE_DIRS})
+endif()
 
 generate_dynamic_reconfigure_options(cfg/OctomapServer.cfg)
 
@@ -46,6 +55,9 @@ set(LINK_LIBS
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
+if(WITH_EDT)
+set(LINK_LIBS ${LINK_LIBS} ${DYNAMICEDT3D_LIBRARIES})
+endif()
 
 add_library(${PROJECT_NAME} src/OctomapServer.cpp src/OctomapServerMultilayer.cpp src/TrackingOctomapServer.cpp)
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})

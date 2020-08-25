@@ -42,6 +42,11 @@
 #include <dynamic_reconfigure/server.h>
 #include <octomap_server/OctomapServerConfig.h>
 
+// #define WITH_EDT
+#ifdef WITH_EDT
+#include <dynamicEDT3D/dynamicEDTOctomap.h>
+#endif
+
 #include <pcl/point_types.h>
 #include <pcl/conversions.h>
 #include <pcl_ros/transforms.h>
@@ -200,6 +205,9 @@ protected:
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
   ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
+#ifdef WITH_EDT
+  ros::Publisher m_edtPub, m_edtVisPub;
+#endif
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
@@ -213,6 +221,7 @@ protected:
   octomap::OcTreeKey m_updateBBXMax;
 
   double m_maxRange;
+  std::string m_cloudInTopic;
   std::string m_worldFrameId; // the map frame
   std::string m_baseFrameId; // base of the robot for ground plane filtering
   bool m_useHeightMap;
@@ -247,6 +256,22 @@ protected:
   bool m_compressMap;
 
   bool m_initConfig;
+
+#ifdef WITH_EDT
+  // edt
+  struct EDTOctomap{
+    DynamicEDTOctomapBase<OcTreeT>* distmap;
+    octomap::point3d bbx_min;
+    octomap::point3d bbx_max;
+    struct EDTOctomapConfig{
+      bool enable = false;
+      float min_res = 0.4;
+      float max_dist = 1.0;
+      float bbx_resize_thresh = 0.5;
+      bool unknown_as_occupied = false;
+    } config;
+  } m_edt;
+#endif
 
   // downprojected 2D map:
   bool m_incrementalUpdate;

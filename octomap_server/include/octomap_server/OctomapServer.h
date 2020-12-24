@@ -66,24 +66,35 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 
-//#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
+#define ROUGH_OCTOMAP_SERVER
 
-#ifdef COLOR_OCTOMAP_SERVER
+#ifdef ENABLE_COLOR_OCTOMAP_SERVER
 #include <octomap/ColorOcTree.h>
+#else
+  #ifdef ROUGH_OCTOMAP_SERVER
+  #include <octomap/RoughOcTree.h>
+  #endif
 #endif
+
 
 namespace octomap_server {
 class OctomapServer {
 
 public:
-#ifdef COLOR_OCTOMAP_SERVER
+#ifdef ENABLE_COLOR_OCTOMAP_SERVER
   typedef pcl::PointXYZRGB PCLPoint;
   typedef pcl::PointCloud<pcl::PointXYZRGB> PCLPointCloud;
   typedef octomap::ColorOcTree OcTreeT;
 #else
-  typedef pcl::PointXYZ PCLPoint;
-  typedef pcl::PointCloud<pcl::PointXYZ> PCLPointCloud;
-  typedef octomap::OcTree OcTreeT;
+  #ifdef ROUGH_OCTOMAP_SERVER
+    typedef pcl::PointXYZI PCLPoint;
+    typedef pcl::PointCloud<pcl::PointXYZI> PCLPointCloud;
+    typedef octomap::RoughOcTree OcTreeT;
+  #else 
+    typedef pcl::PointXYZ PCLPoint;
+    typedef pcl::PointCloud<pcl::PointXYZ> PCLPointCloud;
+    typedef octomap::OcTree OcTreeT;
+  #endif
 #endif
   typedef octomap_msgs::GetOctomap OctomapSrv;
   typedef octomap_msgs::BoundingBoxQuery BBXSrv;
@@ -258,6 +269,7 @@ protected:
   unsigned m_multires2DScale;
   bool m_projectCompleteMap;
   bool m_useColoredMap;
+  bool m_useRoughMap;
 };
 }
 

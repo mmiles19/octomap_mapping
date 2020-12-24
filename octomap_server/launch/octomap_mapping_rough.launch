@@ -1,0 +1,108 @@
+<!-- 
+  Example launch file for octomap_server mapping: 
+  Listens to incoming PointCloud2 data and incrementally builds an octomap. 
+  The data is sent out in different representations. 
+  Copy this file into your workspace and adjust as needed, see
+  www.ros.org/wiki/octomap_server for details  
+-->
+<launch>
+	<!-- data source to integrate (PointCloud2) -->
+  <arg name="cloud_in" default="points"/>
+
+	<!-- fixed map frame (set to 'map' if SLAM or localization running!) -->
+	<arg name="frame_id" default="map"/>
+  <arg name="base_frame_id" default="base_footprint"/>
+  <arg name="use_height_map" default="false"/>
+  <arg name="use_colored_map" default="false"/>
+  <arg name="use_rough_map" default="true"/>
+  <arg name="color_factor" default="0.8"/>
+
+  <arg name="pointcloud_min_x" default="-inf"/>
+  <arg name="pointcloud_max_x" default="inf"/>
+  <arg name="pointcloud_min_y" default="-inf"/>
+  <arg name="pointcloud_max_y" default="inf"/>
+  <arg name="pointcloud_min_z" default="-inf"/>
+  <arg name="pointcloud_max_z" default="inf"/>
+  <arg name="occupancy_min_z" default="-inf"/>
+  <arg name="occupancy_max_z" default="inf"/>
+  <arg name="min_x_size" default="0.0"/>
+  <arg name="min_y_size" default="0.0"/>
+
+  <arg name="filter_speckles" default="true"/>
+  <arg name="filter_ground" default="false"/>
+  <!-- distance of points from plane for RANSAC -->
+  <arg name="ground_filter/distance" default="0.04"/>
+  <!-- angular derivation of found plane: -->
+  <arg name="ground_filter/angle" default="0.15"/>
+  <!-- distance of found plane from z=0 to be detected as ground (e.g. to exclude tables) -->
+  <arg name="ground_filter/plane_distance" default="0.07"/>
+
+	<!-- maximum range to integrate (speedup!) -->
+  <arg name="sensor_model/max_range" default="5.0"/>
+
+  <arg name="resolution" default="0.05"/>
+  <arg name="sensor_model/hit" default="0.7"/>
+  <arg name="sensor_model/miss" default="0.4"/>
+  <arg name="sensor_model/min" default="0.12"/>
+  <arg name="sensor_model/max" default="0.97"/>
+
+  <arg name="compress_map" default="true"/>
+  <arg name="incremental_2D_projection" default="false"/>
+
+  <arg name="color_free/r" default="0.0"/>
+  <arg name="color_free/g" default="1.0"/>
+  <arg name="color_free/b" default="0.0"/>
+  <arg name="color_free/a" default="1.0"/>
+
+  <arg name="color/r" default="0.0"/>
+  <arg name="color/g" default="0.0"/>
+  <arg name="color/b" default="1.0"/>
+  <arg name="color/a" default="1.0"/>
+
+  <arg name="publish_free_space" default="false"/>
+
+  <arg name="latch" default="true"/>
+
+  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server" output="screen">
+    <remap from="cloud_in" to="$(arg cloud_in)" />
+    <param name="frame_id" value="$(arg frame_id)"/>
+    <param name="base_frame_id" value="$(arg base_frame_id)"/>
+    <param name="height_map" value="$(arg use_height_map)"/>
+    <param name="colored_map" value="$(arg use_colored_map)"/>
+    <param name="rough_map" value="$(arg use_rough_map)"/>
+    <param name="color_factor" value="$(arg color_factor)"/>
+    <param name="pointcloud_min_x" value="$(arg pointcloud_min_x)"/>
+    <param name="pointcloud_max_x" value="$(arg pointcloud_max_x)"/>
+    <param name="pointcloud_min_y" value="$(arg pointcloud_min_y)"/>
+    <param name="pointcloud_max_y" value="$(arg pointcloud_max_y)"/>
+    <param name="pointcloud_min_z" value="$(arg pointcloud_min_z)"/>
+    <param name="pointcloud_max_z" value="$(arg pointcloud_max_z)"/>
+    <param name="occupancy_min_z" value="$(arg occupancy_min_z)"/>
+    <param name="occupancy_max_z" value="$(arg occupancy_max_z)"/>
+    <param name="min_x_size" value="$(arg min_x_size)"/>
+    <param name="min_y_size" value="$(arg min_y_size)"/>
+    <param name="filter_speckles" value="$(arg filter_speckles)"/>
+    <param name="filter_ground" value="$(arg filter_ground)"/>
+    <param name="ground_filter/distance" value="$(arg ground_filter/distance)"/>
+    <param name="ground_filter/angle" value="$(arg ground_filter/angle)"/>
+    <param name="ground_filter/plane_distance" value="$(arg ground_filter/plane_distance)"/>
+    <param name="sensor_model/max_range" value="$(arg sensor_model/max_range)"/>
+    <param name="resolution" value="$(arg resolution)"/>
+    <param name="sensor_model/hit" value="$(arg sensor_model/hit)"/>
+    <param name="sensor_model/miss" value="$(arg sensor_model/miss)"/>
+    <param name="sensor_model/min" value="$(arg sensor_model/min)"/>
+    <param name="sensor_model/max" value="$(arg sensor_model/max)"/>
+    <param name="compress_map" value="$(arg compress_map)"/>
+    <param name="incremental_2D_projection" value="$(arg incremental_2D_projection)"/>
+    <param name="color_free/r" value="$(arg color_free/r)"/>
+    <param name="color_free/g" value="$(arg color_free/g)"/>
+    <param name="color_free/b" value="$(arg color_free/b)"/>
+    <param name="color_free/a" value="$(arg color_free/a)"/>
+    <param name="color/r" value="$(arg color/r)"/>
+    <param name="color/g" value="$(arg color/g)"/>
+    <param name="color/b" value="$(arg color/b)"/>
+    <param name="color/a" value="$(arg color/a)"/>
+    <param name="publish_free_space" value="$(arg publish_free_space)"/>
+    <param name="latch" value="$(arg latch)"/>
+	</node>
+</launch>

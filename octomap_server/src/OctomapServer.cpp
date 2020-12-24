@@ -131,6 +131,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
 #endif
   }
 
+  }
 
   // initialize octomap object & params
   m_octree = new OcTreeT(m_res);
@@ -197,6 +198,17 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_edtPub = m_nh.advertise<sensor_msgs::PointCloud2>("edt", 1, m_latchedTopics);
   m_edtVisPub = m_nh.advertise<visualization_msgs::MarkerArray>("edt_vis_array", 1, m_latchedTopics);
 #endif
+
+// #ifdef WITH_SURFACEINTENSITY
+//   m_surfaceIntensityPub;
+//   m_surfaceIntensityVisPub;
+
+//   m_surfaceIntensity = new SurfaceIntensityOctomapBase<OcTreeT>(m_octree);
+//   for (ray source conifgs)
+//   {
+//     m_surfaceIntensity->registerRaySource();
+//   }
+// #endif
 
   // m_normalsVisPub = m_nh.advertise<visualization_msgs::Marker>("normals", 1, m_latchedTopics);
 
@@ -501,8 +513,6 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf, const PCLPointCl
 #endif
 }
 
-
-
 void OctomapServer::publishAll(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
   size_t octomapSize = m_octree->size();
@@ -520,6 +530,9 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 #ifdef WITH_EDT
   bool publishDistanceTransform = m_edt.config.enable && (m_latchedTopics || m_edtPub.getNumSubscribers() > 0 || m_edtVisPub.getNumSubscribers() > 0);
 #endif
+// #ifdef WITH_SURFACEINTENSITY
+//   bool publishSurfaceIntensity = m_surfaceIntensity.config.enable && (m_latchedTopics || m_edtPub.getNumSubscribers() > 0 || m_edtVisPub.getNumSubscribers() > 0);
+// #endif
   m_publish2DMap = (m_latchedTopics || m_mapPub.getNumSubscribers() > 0);
 
   // init markers for free space:
@@ -731,44 +744,39 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   if (publishDistanceTransform){
     // OcTreeT *tree = new OcTreeT(*m_octree);
 
-    static bool has_init;
-    if (has_init==NULL)
-    {
-      has_init = false;
-    }
+    static bool need_to_reset = true;
 
     double x,y,z;
     m_octree->getMetricMin(x,y,z);
     octomap::point3d distmap_min_temp(x,y,z);
+    // distmap_min_temp = distmap_min_temp * octomath::Vector3(2, 2, 1) + octomath::Vector3(0, 0, 5);
     m_octree->getMetricMax(x,y,z);
     octomap::point3d distmap_max_temp(x,y,z);
-    if (!has_init)
+    // distmap_max_temp = distmap_max_temp * octomath::Vector3(2, 2, 1) + octomath::Vector3(0, 0, -5);
+    if (need_to_reset)
     {
       m_edt.bbx_min = distmap_min_temp;
+      m_edt.bbx_max = distmap_max_temp;
     }
     if (fabs(m_edt.bbx_min.x()-distmap_min_temp.x())>m_edt.config.bbx_resize_thresh ||
         fabs(m_edt.bbx_min.y()-distmap_min_temp.y())>m_edt.config.bbx_resize_thresh ||
         fabs(m_edt.bbx_min.z()-distmap_min_temp.z())>m_edt.config.bbx_resize_thresh )
     {
       m_edt.bbx_min = distmap_min_temp;
-      has_init = false;
-    }
-    if (!has_init)
-    {
-      m_edt.bbx_max = distmap_max_temp;
+      need_to_reset = true;
     }
     if (fabs(m_edt.bbx_max.x()-distmap_max_temp.x())>m_edt.config.bbx_resize_thresh ||
         fabs(m_edt.bbx_max.y()-distmap_max_temp.y())>m_edt.config.bbx_resize_thresh ||
         fabs(m_edt.bbx_max.z()-distmap_max_temp.z())>m_edt.config.bbx_resize_thresh )
     {
       m_edt.bbx_max = distmap_max_temp;
-      has_init = false;
+      need_to_reset = true;
     }
-    if (!has_init)
+    if (need_to_reset)
     {
       ROS_INFO("(Re-)Initing EDT distmap");
       m_edt.distmap = new DynamicEDTOctomapBase<OcTreeT>(m_edt.config.max_dist, m_octree, m_edt.bbx_min, m_edt.bbx_max, m_edt.config.unknown_as_occupied);
-      has_init = true;
+      need_to_reset = false;
     }
     m_edt.distmap->update();
 
@@ -841,6 +849,13 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     m_edtVisPub.publish(edtVis);
   }
 #endif
+
+// #if WITH_SURFACEINTENSITY
+//   if (publishSurfaceIntensity){
+//     m_surfaceIntensity->update(pose);
+//     m_surfaceIntensity->publish();
+//   }
+// #endif
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   ROS_DEBUG("Map publishing in OctomapServer took %f sec", total_elapsed);

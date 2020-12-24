@@ -618,7 +618,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
             }
             else
             {
-              std_msgs::ColorRGBA _color_msg; _color_msg.r = 0.0; _color_msg.g = 0.0; _color_msg.b = 0.0; _color_msg.a = 1.0f;
+              std_msgs::ColorRGBA _color_msg; _color_msg.r = 1.0; _color_msg.g = 0.0; _color_msg.b = 0.0; _color_msg.a = 1.0f;
               occupiedNodesVis.markers[idx].colors.push_back(_color_msg);
             }
           }

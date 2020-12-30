@@ -6,7 +6,7 @@
   www.ros.org/wiki/octomap_server for details
 -->
 <launch>
-  <arg name="name_prefix" default=""/>
+  <arg name="ns" default=""/>
 	<!-- data source to integrate (PointCloud2) -->
   <arg name="cloud_in" default="points"/>
 
@@ -41,7 +41,7 @@
 	<!-- maximum range to integrate (speedup!) -->
   <arg name="sensor_model/max_range" default="5.0"/>
 
-  <arg name="resolution" default="0.05"/>
+  <arg name="resolution" default="0.2"/>
   <arg name="sensor_model/hit" default="0.7"/>
   <arg name="sensor_model/miss" default="0.4"/>
   <arg name="sensor_model/min" default="0.12"/>
@@ -64,8 +64,17 @@
 
   <arg name="latch" default="true"/>
 
-  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server$(arg name_prefix)" output="screen">
-    <remap from="cloud_in" to="$(arg cloud_in)" />
+  <arg name="octomap_server_name"     default="octomap_server"           if="$(eval ns=='')"/>
+  <arg name="octomap_server_name"     default="octomap_server_$(arg ns)"     unless="$(eval ns=='')"/>
+  <node pkg="octomap_server" type="octomap_server_node" name="$(arg octomap_server_name)" output="screen">
+    <remap from="cloud_in"                      to="$(arg cloud_in)" />
+    <remap from="occupied_cells_vis_array"      to="/$(arg ns)/occupied_cells_vis_array" />
+    <remap from="octomap_binary"                to="/$(arg ns)/octomap_binary" />
+    <remap from="octomap_full"                  to="/$(arg ns)/octomap_full" />
+    <remap from="octomap_point_cloud_centers"   to="/$(arg ns)/octomap_point_cloud_centers" />
+    <remap from="projected_map"                 to="/$(arg ns)/projected_map" />
+    <remap from="free_cells_vis_array"          to="/$(arg ns)/free_cells_vis_array" />
+
     <param name="frame_id" value="$(arg frame_id)"/>
     <param name="base_frame_id" value="$(arg base_frame_id)"/>
     <param name="height_map" value="$(arg use_height_map)"/>

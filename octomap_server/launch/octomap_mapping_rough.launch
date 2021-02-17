@@ -64,6 +64,8 @@
 
   <arg name="latch" default="true"/>
 
+  <arg name="trav_marker_density"             default="0"/>
+
   <arg name="octomap_server_name"     default="octomap_server"           if="$(eval ns=='')"/>
   <arg name="octomap_server_name"     default="octomap_server_$(arg ns)"     unless="$(eval ns=='')"/>
   <node pkg="octomap_server" type="octomap_server_node" name="$(arg octomap_server_name)" output="screen">
@@ -114,5 +116,6 @@
     <param name="color/a" value="$(arg color/a)"/>
     <param name="publish_free_space" value="$(arg publish_free_space)"/>
     <param name="latch" value="$(arg latch)"/>
+    <param name="trav_marker_density" value="$(arg trav_marker_density)"/>
 	</node>
 </launch>

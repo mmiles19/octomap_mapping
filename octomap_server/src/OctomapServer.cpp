@@ -47,6 +47,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_reconfigureServer(m_config_mutex, private_nh_),
   m_octree(NULL),
   m_maxRange(-1.0),
+  m_travMarkerDensity(0),
   m_worldFrameId("/map"), m_baseFrameId("base_footprint"), 
   m_useHeightMap(true),
   m_useColoredMap(false),
@@ -102,6 +103,8 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_nh_private.param("ground_filter/plane_distance", m_groundFilterPlaneDistance, m_groundFilterPlaneDistance);
 
   m_nh_private.param("sensor_model/max_range", m_maxRange, m_maxRange);
+
+  m_nh_private.param("trav_marker_density", m_travMarkerDensity, m_travMarkerDensity);
 
   m_nh_private.param("resolution", m_res, m_res);
   m_nh_private.param("sensor_model/hit", probHit, 0.7);
@@ -189,6 +192,7 @@ OctomapServer::OctomapServer(const ros::NodeHandle private_nh_, const ros::NodeH
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
+  m_travMarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("trav_markers", 1, m_latchedTopics);
 
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
@@ -297,7 +301,6 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   Eigen::Matrix4f sensorToWorld;
   pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
 
-
   // set up filter for height range, also removes NANs:
   pcl::PassThrough<PCLPoint> pass_x;
   pass_x.setFilterFieldName("x");
@@ -367,7 +370,6 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
     pc_ground.header = pc.header;
     pc_nonground.header = pc.header;
   }
-
 
   insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
 
@@ -524,6 +526,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   bool publishPointCloud = (m_latchedTopics || m_pointCloudPub.getNumSubscribers() > 0);
   bool publishBinaryMap = (m_latchedTopics || m_binaryMapPub.getNumSubscribers() > 0);
   bool publishFullMap = (m_latchedTopics || m_fullMapPub.getNumSubscribers() > 0);
+  bool publishTravMarkers = m_travMarkerDensity>0 && (m_latchedTopics || m_travMarkerPub.getNumSubscribers() > 0);
 
   m_publish2DMap = (m_latchedTopics || m_mapPub.getNumSubscribers() > 0);
 
@@ -539,6 +542,25 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   visualization_msgs::MarkerArray occupiedNodesVis;
   // each array stores all cubes of a different size, one for each depth level:
   occupiedNodesVis.markers.resize(m_treeDepth+1);
+
+  // trav text markers
+  static visualization_msgs::MarkerArray travMarkers;
+  // clear existing text markers
+  // if (publishTravMarkers)
+  // {
+    // travMarkers.header.frame_id = m_worldFrameId;
+    // travMarkers.header.stamp = rostime;
+    // if (travMarkers.markers.size()>0)
+    // {
+    //   ROS_INFO("Deleting %d trav markers.", travMarkers.markers.size());
+    //   for (uint i=0; i<travMarkers.markers.size(); i++)
+    //   {
+    //     travMarkers.markers[i].action = visualization_msgs::Marker::DELETE;
+    //   }
+    //   m_travMarkerPub.publish(travMarkers);
+    // }
+    travMarkers.markers.clear();
+  // }
 
   // init pointcloud:
   pcl::PointCloud<PCLPoint> pclCloud;
@@ -625,6 +647,36 @@ void OctomapServer::publishAll(const ros::Time& rostime){
 #endif
         }
 
+        // add trav text markers
+        if (publishTravMarkers && !isnan(it->getRough()))
+        {
+          int discrete_x = (it.getX()/(2*half_size))+0.5;
+          int discrete_y = (it.getY()/(2*half_size))+0.5;
+          if (discrete_x % m_travMarkerDensity ==0 && discrete_y % m_travMarkerDensity ==0)
+          {
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = m_worldFrameId;
+            marker.header.stamp = rostime;
+            marker.ns = "";
+            marker.id = travMarkers.markers.size();
+            marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+            marker.pose.position.x = it.getX();
+            marker.pose.position.y = it.getY();
+            marker.pose.position.z = it.getZ()+2*half_size;
+            // marker.pose.position.x += offset[0];
+            // marker.pose.position.y += offset[1];
+            // marker.pose.position.z += offset[2];
+            marker.scale.z = 0.1;
+            marker.color.r = 0.8;
+            marker.color.g = 0.8;
+            marker.color.b = 0.8;
+            marker.color.a = 1.0;
+            marker.text = std::to_string(it->getRough());
+            marker.action = visualization_msgs::Marker::ADD;
+            travMarkers.markers.push_back(marker);
+          }
+        }
+
         // insert into pointcloud:
         if (publishPointCloud) {
 #ifdef ENABLE_COLOR_OCTOMAP_SERVER
@@ -705,7 +757,6 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     m_markerPub.publish(occupiedNodesVis);
   }
 
-
   // finish FreeMarkerArray:
   if (publishFreeMarkerArray){
     for (unsigned i= 0; i < freeNodesVis.markers.size(); ++i){
@@ -731,6 +782,14 @@ void OctomapServer::publishAll(const ros::Time& rostime){
     m_fmarkerPub.publish(freeNodesVis);
   }
 
+  // finish trav markers
+  if (publishTravMarkers)
+  {
+    // travMarkers.header.frame_id = m_worldFrameId;
+    // travMarkers.header.stamp = rostime;
+    ROS_INFO("Publishing %d trav markers.", travMarkers.markers.size());
+    m_travMarkerPub.publish(travMarkers);
+  }
 
   // finish pointcloud:
   if (publishPointCloud){
@@ -871,7 +930,6 @@ void OctomapServer::publishFullOctoMap(const ros::Time& rostime) const{
     ROS_ERROR("Error serializing OctoMap");
 
 }
-
 
 void OctomapServer::filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const{
   ground.header = pc.header;
